@@ -61,34 +61,34 @@ Event types：
 ### project
 
 ```text
-id UUID PK
-name VARCHAR
-source_type VARCHAR
+id VARCHAR(36) PK
+name VARCHAR(255)
+source_type VARCHAR(64)
 source_path TEXT
-default_branch VARCHAR
-created_at TIMESTAMP
-updated_at TIMESTAMP
+default_branch VARCHAR(255)
+created_at DATETIME
+updated_at DATETIME
 ```
 
 ### project_file
 
 ```text
-id UUID PK
-project_id UUID
+id VARCHAR(36) PK
+project_id VARCHAR(36)
 path TEXT
-language VARCHAR
-hash VARCHAR
+language VARCHAR(64)
+hash VARCHAR(64)
 size BIGINT
-last_indexed_at TIMESTAMP
+last_indexed_at DATETIME
 ```
 
 ### code_symbol
 
 ```text
-id UUID PK
-project_id UUID
-file_id UUID
-symbol_type VARCHAR
+id VARCHAR(36) PK
+project_id VARCHAR(36)
+file_id VARCHAR(36)
+symbol_type VARCHAR(64)
 qualified_name TEXT
 start_line INT
 end_line INT
@@ -98,74 +98,76 @@ signature TEXT
 ### graph_edge
 
 ```text
-id UUID PK
-project_id UUID
-source_node_id UUID
-target_node_id UUID
-relation_type VARCHAR
-metadata JSONB
+id VARCHAR(36) PK
+project_id VARCHAR(36)
+source_node_id VARCHAR(36)
+target_node_id VARCHAR(36)
+relation_type VARCHAR(64)
+metadata JSON
 ```
 
 ### code_chunk
 
 ```text
-id UUID PK
-project_id UUID
-file_id UUID
-symbol_id UUID
+id VARCHAR(36) PK
+project_id VARCHAR(36)
+file_id VARCHAR(36)
+symbol_id VARCHAR(36)
 content TEXT
-embedding VECTOR
-metadata JSONB
+qdrant_point_id VARCHAR(36)
+metadata JSON
 ```
+
+注：向量 embedding 存储在 Qdrant，MySQL 侧记录对应的 Qdrant point id 用于关联查询。
 
 ### agent_run
 
 ```text
-id UUID PK
-project_id UUID
+id VARCHAR(36) PK
+project_id VARCHAR(36)
 query TEXT
-status VARCHAR
-started_at TIMESTAMP
-finished_at TIMESTAMP
-token_usage JSONB
+status VARCHAR(32)
+started_at DATETIME
+finished_at DATETIME
+token_usage JSON
 ```
 
 ### tool_call
 
 ```text
-id UUID PK
-run_id UUID
-tool_name VARCHAR
-input JSONB
+id VARCHAR(36) PK
+run_id VARCHAR(36)
+tool_name VARCHAR(128)
+input JSON
 output_summary TEXT
-status VARCHAR
+status VARCHAR(32)
 latency_ms BIGINT
-created_at TIMESTAMP
+created_at DATETIME
 ```
 
 ### evidence
 
 ```text
-id UUID PK
-run_id UUID
-type VARCHAR
+id VARCHAR(36) PK
+run_id VARCHAR(36)
+type VARCHAR(64)
 file_path TEXT
 symbol TEXT
 start_line INT
 end_line INT
 excerpt TEXT
-confidence NUMERIC
+confidence DECIMAL(5,4)
 ```
 
 ### evaluation_case
 
 ```text
-id UUID PK
-project_id UUID
-name VARCHAR
+id VARCHAR(36) PK
+project_id VARCHAR(36)
+name VARCHAR(255)
 query TEXT
-expected JSONB
-created_at TIMESTAMP
+expected JSON
+created_at DATETIME
 ```
 
 ## 3. Indexes
@@ -177,7 +179,6 @@ created_at TIMESTAMP
 - qualified_name
 - relation_type
 - run_id
-- vector index
 - timestamps
 
-Vector index 的具体类型根据 pgvector 版本和数据规模确定。
+向量索引由 Qdrant 内部管理，MySQL 侧无需建向量索引。

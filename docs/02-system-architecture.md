@@ -27,8 +27,8 @@ Tool Registry
   |---- RAG Tool
   |
 Knowledge Layer
-  |---- PostgreSQL
-  |---- pgvector
+  |---- MySQL 8.0+
+  |---- Qdrant
   |---- Redis
   |---- Code Graph
   |
@@ -135,7 +135,8 @@ MVP：
 - Java 21
 - Spring Boot 3.x
 - Spring AI
-- PostgreSQL + pgvector
+- MySQL 8.0+
+- Qdrant
 - Redis
 - Vue 3
 - Docker Compose

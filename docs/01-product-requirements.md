@@ -74,7 +74,7 @@
 
 Agent 输入自然语言需求，输出结构化 Analysis Report。
 
-### FR-006 Evidence
+### FR-006### FR-006 Evidence
 
 每个关键结论至少包含：
 

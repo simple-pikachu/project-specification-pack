@@ -11,8 +11,9 @@
 
 服务：
 
-- postgres
+- mysql
 - redis
+- qdrant
 - backend
 - frontend
 
@@ -26,6 +27,8 @@ DATABASE_URL
 DATABASE_USERNAME
 DATABASE_PASSWORD
 REDIS_URL
+QDRANT_URL
+QDRANT_API_KEY
 LLM_BASE_URL
 LLM_API_KEY
 LLM_MODEL
@@ -48,9 +51,11 @@ Kubernetes/VM
  ↓
 Backend
  ↓
-PostgreSQL
+MySQL 8.0+
  ↓
 Redis
+ ↓
+Qdrant
 ```
 
 MVP 可先 Docker Compose，生产再 Kubernetes。
@@ -95,17 +100,22 @@ Agent Run
 
 ## 7. Backup
 
-PostgreSQL：
+MySQL：
 
 - daily backup
 - retention policy
 - restore drill
 
+Qdrant：
+
+- 定期 snapshot，按官方文档执行
+- 向量数据可由 MySQL chunk 记录重新 embedding 重建，不应成为唯一事实来源
+
 Project index 可重建，因此不应成为唯一事实来源。
 
 ## 8. Failure Handling
 
-PostgreSQL unavailable：
+MySQL unavailable：
 
 - fail fast
 - health check DOWN
@@ -113,6 +123,11 @@ PostgreSQL unavailable：
 Redis unavailable：
 
 - 非关键缓存功能降级
+
+Qdrant unavailable：
+
+- 向量检索降级为关键词检索
+- health check 明确标注 vector search degraded
 
 LLM unavailable：
 

@@ -54,7 +54,7 @@ ROUTES_TO
 
 ## 4. Code Graph MVP
 
-推荐先存 PostgreSQL：
+先存 MySQL 8.0+：
 
 ```text
 graph_node
@@ -63,7 +63,7 @@ graph_edge
 
 当关系规模和查询复杂度明显增加后，再评估 Neo4j 等专用 Graph DB。
 
-MVP 不得因为“图数据库很酷”而增加不必要基础设施。
+MVP 不得因为”图数据库很酷”而增加不必要基础设施。
 
 ## 5. Chunk Strategy
 
@@ -101,7 +101,7 @@ Exact Search
  +
 Keyword Search
  +
-Vector Search
+Vector Search（Qdrant）
  +
 Graph Expansion
  +
