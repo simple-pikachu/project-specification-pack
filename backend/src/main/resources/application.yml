@@ -1,0 +1,160 @@
+# ============================================================
+# application.yml — Spring Boot 主配置文件
+# ============================================================
+#
+# 【配置策略说明】
+# 本文件是默认配置（适用于本地 IDE 直接运行）。
+# docker 环境通过 application-docker.yml 覆盖数据库地址等。
+# 生产环境通过环境变量注入敏感配置（API Key 等）。
+#
+# Spring Boot 配置优先级（从高到低）：
+# 环境变量 > application-{profile}.yml > application.yml
+# ============================================================
+
+spring:
+  application:
+    name: pia-server
+
+  # ──────────────────────────────────────────────────────────
+  # 数据库配置（本地直连，非 Docker 模式）
+  # ──────────────────────────────────────────────────────────
+  datasource:
+    url: jdbc:mysql://10.200.1.87:3310/pia?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DATABASE_USERNAME:root}
+    password: ${DATABASE_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 连接池：Agent 并发调用工具时需要多个 DB 连
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # ──────────────────────────────────────────────────────────
+  # JPA / Hibernate 配置
+  # ──────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # 【重要】生产环境必须设为 validate 或 none，禁止 create-drop
+      # 数据库结构由 Flyway 管理，Hibernate 只做校验
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  # ──────────────────────────────────────────────────────────
+  # Flyway — 数据库版本管理
+  # ──────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    # 迁移脚本存放位置
+    locations: classpath:db/migration
+    # 表名（记录哪些迁移已执行）
+    table: flyway_schema_history
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    # 字符集
+    sql-migration-encoding: UTF-8
+
+    # ──────────────────────────────────────────────────────────
+  # Redis 配置
+  # ──────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:10.121.12.151}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:Yealink1105}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          min-idle: 2
+          max-active: 10
+
+  # ──────────────────────────────────────────────────────────
+  # Spring AI 配置
+  # ──────────────────────────────────────────────────────────
+  ai:
+    # LLM：使用 OpenAI 兼容协议（支持 OpenAI/Azure/DeepSeek/阿里云等）
+    openai:
+      base-url: ${LLM_BASE_URL:https://worklink.yealink.com/llmproxy/v1}
+      api-key: ${LLM_API_KEY:fjyV6IDSpfm8JSSx0BWwwjzJAbIukN1JEnRD6kq_bfA}
+      chat:
+        options:
+          # 对话模型（Planner/Reviewer/Answer 都用这个）
+          model: ${LLM_MODEL:azure/gpt-5.6-luna}
+          # temperature 0.1：Agent 分析任务要求严谨，不需要创造性
+          temperature: 0.1
+                    # max-tokens：单次 LLM 调用最大输出 token 数
+          max-tokens: 4096
+      embedding:
+        options:
+          # Embedding 模型：将文本转为向量，用于语义检索
+          model: ${EMBEDDING_MODEL:text-embedding-3-small}
+
+    # Qdrant 向量数据库配置
+    vectorstore:
+      qdrant:
+        host: ${QDRANT_HOST:localhost}
+        port: ${QDRANT_GRPC_PORT:6334}
+        # Collection 名称：存储代码片段向量
+        collection-name: code_chunks
+        # 使用 gRPC 协议（比 REST 更高效）
+        use-tls: false
+        # 向量维度：与 Embedding 模型输出维度一致
+        # text-embedding-3-small 输出 1536 维
+        initialize-schema: true
+
+# ──────────────────────────────────────────────────────────
+# Actuator：健康检查与指标
+# ──────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      # 显示详细健康状态（MySQL/Redis/Qdrant 各自状态）
+      show-details: always
+  health:
+    # 检查 Qdrant 连接（自定义健康检查）
+    defaults:
+            enabled: true
+
+# ──────────────────────────────────────────────────────────
+# 日志配置
+# ──────────────────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    com.example.pia: DEBUG
+    # 关闭 Hibernate SQL 日志（调试时可以打开）
+    org.hibernate.SQL: WARN
+    # Spring AI 的日志（调试 LLM 调用时可以打开）
+    org.springframework.ai: INFO
+
+# ──────────────────────────────────────────────────────────
+# PIA 自定义配置
+# ──────────────────────────────────────────────────────────
+pia:
+  agent:
+    # Agent 单次运行最大 Tool 调用次数（防止无限循环）
+    max-tool-calls: 30
+    # Agent 最大循环次数（Planner 重新规划的最大次数）
+    max-iterations: 5
+    # 单次 LLM 调用 token 预算（避免超出上下文窗口）
+    token-budget: 16000
+    # Tool 调用默认超时（秒）
+    tool-timeout-seconds: 10
+  indexing:
+    # 支持解析的文件扩展名
+    supported-extensions: .java,.kt,.ts,.js,.vue,.sql,.yaml,.yml,.json,.md
+    # 单文件最大解析大小（MB）
+    max-file-size-mb: 10
+  security:
+    # 允许访问的项目根目录（防路径穿越，Phase 6 完善）
+    allowed-roots:
+            - ${user.home}/projects

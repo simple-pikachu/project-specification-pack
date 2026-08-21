@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+    ============================================================
+    PIA (Project Intelligence Agent) — 后端服务
+    ============================================================
+
+    【对 Java 程序员的说明：这个项目是什么？】
+
+    传统 Java 后端：接收 HTTP 请求 → 查数据库 → 返回数据。
+
+    Agent 后端：接收自然语言问题 → 让 AI 规划调查步骤
+               → 自动调用多个"工具"（搜代码、读文件、查图谱）
+               → 汇总证据 → 生成结构化分析报告 → 通过 SSE 流式输出。
+
+    核心依赖说明：
+    - spring-ai：Spring 官方 AI 框架，封装了 LLM 调用、向量存储、工具调用等 Agent 核心能力
+    - spring-boot：Web 框架，提供 REST API 和 SSE（Server-Sent Events 流式输出）
+    - mysql-connector：MySQL 数据库驱动
+    - flyway：数据库版本管理，自动执行 SQL 迁移脚本
+    - javaparser：Java 代码 AST 解析，用于提取类/方法/调用关系（Code Intelligence 层）
+============================================================
+    -->
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <!-- Spring Boot 3.3.x 要求 Java 17+，我们用 Java 21 -->
+        <version>3.3.4</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.example</groupId>
+    <artifactId>pia-server</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <name>PIA Server</name>
+    <description>Project Intelligence Agent — 企业级代码分析 Agent 平台</description>
+    <packaging>jar</packaging>
+
+    <properties>
+        <java.version>21</java.version>
+        <!-- Spring AI BOM 版本，管理所有 spring-ai-* 依赖的版本 -->
+        <spring-ai.version>1.0.0</spring-ai.version>
+        <!-- JavaParser 用于解析 Java 源码 AST -->
+        <javaparser.version>3.26.1</javaparser.version>
+    </properties>
+
+    <!-- ============================================================
+         Spring AI BOM (Bill of Materials)
+         统一管理所有 spring-ai-* 依赖的版本，避免版本冲突
+         这是 Spring AI 的推荐引入方式
+    ============================================================ -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+
+        <!-- ======================================================
+             Web 层：REST API + SSE 流式输出
+             SSE (Server-Sent Events) 是 Agent 实时推送进度的核心机制：
+             Agent 分析过程中，每一步（规划/工具调用/结论）都通过 SSE 实时推送给前端，
+             用户不需要等待全部完成才看到结果。
+        ====================================================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- WebFlux 提供 Flux<ServerSentEvent> 类型，用于 SSE 流式响应 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- 参数校验：@Valid @NotBlank @Size 等注解 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Actuator：/actuator/health 健康检查端点，Docker healthcheck 用 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ======================================================
+             Spring AI — Agent 核心能力
+             【重点！这是 Agent 开发的关键依赖】
+
+             spring-ai-openai：
+             - ChatClient：发送消息给 LLM，获取回复
+             - EmbeddingModel：将文本转为向量（用于语义搜索）
+             - 兼容 OpenAI 协议的任意 LLM（DeepSeek、Azure、阿里云等）
+
+             spring-ai-qdrant-store：
+             - VectorStore 接口的 Qdrant 实现
+             - 存储/检索代码向量
+
+             spring-ai-mcp-*（后续阶段引入）：
+             - Model Context Protocol，标准化 Agent Tool 接口协议
+        ====================================================== -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-vector-store-qdrant</artifactId>
+        </dependency>
+
+        <!-- ======================================================
+             数据库层
+        ====================================================== -->
+        <!-- Spring Data JPA：ORM 层，Repository 模式 -->
+<dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- MySQL 8.0 JDBC 驱动 -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Flyway：数据库版本管理
+             每次启动自动检查并执行 src/main/resources/db/migration/ 下的 SQL 文件
+             命名规则：V1__描述.sql, V2__描述.sql（V + 版本号 + __ + 描述）
+             好处：团队协作时数据库结构自动同步，不用手动执行 SQL -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <!-- Flyway MySQL 支持（Flyway 10+ 将 MySQL 支持拆分为独立模块）-->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
+        <!-- ======================================================
+             Redis 缓存
+        ====================================================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- ======================================================
+             Spring Security（Phase 6 RBAC + OAuth2）
+             MVP 配置为放行模式；Phase 6 启用 JWT/OAuth2
+        ====================================================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- Jackson JSON 解析（用于评估脚本/Prompt 参数解析） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- ======================================================
+                          Code Intelligence — Java AST 解析
+             【Agent 需要理解代码结构，不能只是"读文本"】
+
+             JavaParser 将 Java 源文件解析为 AST（抽象语法树），
+             从中提取：类名、方法名、参数、返回类型、调用关系等。
+             这是 Code Graph（代码知识图谱）的数据来源。
+
+             例如：解析 OrderController.java
+             → 发现 cancel() 方法调用了 OrderService.cancel()
+             → 在知识图谱中建立 CALLS 边：OrderController.cancel → OrderService.cancel
+             → Agent 查"取消订单影响哪些代码"时，就能沿着这条边找到 Service、Mapper、DB
+        ====================================================== -->
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+            <version>${javaparser.version}</version>
+        </dependency>
+
+        <!-- ======================================================
+             工具库
+        ====================================================== -->
+        <!-- Lombok：减少样板代码（@Getter @Setter @Builder @Slf4j 等） -->
+        <dependency>
+                        <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ======================================================
+             测试
+        ====================================================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers：集成测试时自动启动真实的 MySQL/Redis/Qdrant 容器
+             避免测试依赖真实环境，保证测试可重复 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+             <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ============================================================
+         仓库配置
+         问题背景：公司内部 Nexus 没有代理 Maven Central，
+         Spring AI 1.0.0 GA 需要从 Maven Central 下载。
+         解决方案：在 pom.xml 中显式声明 Maven Central，
+         Maven 会优先查找 settings.xml 配置的仓库，找不到时再尝试这里。
+         长期方案：请 Nexus 管理员为内部仓库添加 Maven Central 代理。
+    ============================================================ -->
+    <repositories>
+        <!-- Maven Central：Spring AI 1.0.0 GA 的发布地址 -->
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo1.maven.org/maven2</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+                        </snapshots>
+        </repository>
+        <repository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>spring-snapshots</id>
+            <name>Spring Snapshots</name>
+            <url>https://repo.spring.io/snapshot</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>central</id>
+            <url>https://repo1.maven.org/maven2</url>
+        </pluginRepository>
+        <pluginRepository>
+            <id>spring-milestones</id>
+            <url>https://repo.spring.io/milestone</url>
+        </pluginRepository>
+    </pluginRepositories>
+
+    <build>
+                <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

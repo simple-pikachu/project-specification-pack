@@ -1,0 +1,29 @@
+# ============================================================
+# application-docker.yml — Docker 环境专用配置
+# ============================================================
+# 当 SPRING_PROFILES_ACTIVE=docker 时，本文件覆盖 application.yml
+# Docker 网络中服务通过容器名互相访问（如 mysql:3306）
+# ============================================================
+
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:mysql://mysql:3306/pia?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai}
+    username: ${DATABASE_USERNAME:pia_user}
+    password: ${DATABASE_PASSWORD:pia_pass}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:pia_redis_2024}
+
+  ai:
+    vectorstore:
+      qdrant:
+        host: ${QDRANT_HOST:qdrant}
+        port: ${QDRANT_GRPC_PORT:6334}
+
+logging:
+  level:
+    root: INFO
+    com.example.pia: INFO

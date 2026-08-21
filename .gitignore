@@ -1,0 +1,27 @@
+# 环境变量（含 API Key，绝对不能提交）
+.env
+
+# Maven
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+docker-compose.override.yml
